@@ -406,7 +406,7 @@ function drawMapBg(){
   }
 }
 function drawMap(){
-  if($('mapw').classList.contains('hide'))return;
+  if($('mapw').classList.contains('hide')||!M||!MAP.bg['Main floor'])return;   // the model loads asynchronously on the web; the map is built after it
   const lv=levelAt();if(lv!=MAP.cur){MAP.cur=lv;$('mapL').textContent=lv}
   const c=$('map'),x=c.getContext('2d');x.setTransform(1,0,0,1,0,0);x.clearRect(0,0,c.width,c.height);x.drawImage(MAP.bg[lv],0,0);
   const k=MAP.s*MAP.dpr,P=NAV.mode=='walk'?cam.position:ctl.target,px=(P.x-MAP.x0)*k,pz=(P.z-MAP.z0)*k;
@@ -417,7 +417,8 @@ function drawMap(){
 }
 // frame loop: tween, movement, orbit, render, labels, map
 const clock=new THREE.Clock(),v3=new THREE.Vector3();
-R.setAnimationLoop(()=>{const dt=Math.min(clock.getDelta(),.25);
+R.setAnimationLoop(()=>{try{frame()}catch(err){if(!frame.warned){frame.warned=1;console.error('viewer frame:',err)}}});   // one bad frame must not stop the render loop
+function frame(){const dt=Math.min(clock.getDelta(),.25);
   if(NAV.tw){const t=NAV.tw;t.k=Math.min(1,t.k+dt/t.dur);const e=ease(t.k);cam.position.lerpVectors(t.p0,t.p1,e);
     if(t.t1)ctl.target.lerpVectors(t.t0,t.t1,e);if(NAV.mode=='walk'){NAV.yaw=t.y0+(t.y1-t.y0)*e;aimCam()}if(t.k>=1)NAV.tw=null}
   const fast=(K('ShiftLeft')||K('ShiftRight'))?3:1,walk=NAV.mode=='walk';
@@ -439,7 +440,7 @@ R.setAnimationLoop(()=>{const dt=Math.min(clock.getDelta(),.25);
   }
   R.render(S,cam);const rc=R.domElement.getBoundingClientRect();
   for(const d of dims){v3.copy(d.a).add(d.b).multiplyScalar(.5).project(cam);d.lab.style.display=v3.z<1&&v3.z>-1?'':'none';d.lab.style.left=(rc.left+(v3.x+1)/2*rc.width)+'px';d.lab.style.top=(rc.top+(1-v3.y)/2*rc.height)+'px'}
-  drawMap()});
+  drawMap()}
 window.viewer={S,cam,ctl,meshes,ftin,select,setView,R,NAV,setMode,floorBelow,walkTo};
 load().catch(err=>{$('load').textContent='The model could not be loaded: '+err.message});
 }
