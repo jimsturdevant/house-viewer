@@ -162,7 +162,9 @@ import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
 const $=id=>document.getElementById(id);
 const ftin=v=>{const s=v<0?'-':'';v=Math.abs(v);let f=Math.floor(v/12),i=v-12*f,w=Math.floor(i),n=Math.round((i-w)*16);if(n==16){w++;n=0}if(w==12){f++;w=0}let fr='';if(n){let d=16;while(n%2==0){n/=2;d/=2}fr=` ${n}/${d}`}return `${s}${f}'-${w}${fr}"`};
 const ORDER=['Walls','Doors','Windows','Cladding','Roof','Slabs','Foundation walls','Footings','Floor framing','Wall framing','Roof framing','Porch framing','Porch columns','HVAC','Plumbing','Electrical','Clearances','Clashes','Stair','Casework','Fixtures','Appliances','Equipment','Exterior trim','Ceilings'];
-const OFF=new Set(['Ceilings','Wall framing','Roof framing','Floor framing','Clearances','Clashes']);
+const OFF=new Set(['Clearances','Clashes']);   // everything else starts on; clash and clear-zone conflict markers are opt-in
+// display styles that override the model colour / opacity: walls and cladding read as solid but let the framing behind show; doors contrast and see-through
+const STYLE={Walls:{opacity:.82,depthWrite:true},Cladding:{opacity:.82,depthWrite:true},Doors:{color:[.36,.22,.13],opacity:.45,edge:0x3a2010}};
 let M,meshes=[],byGroup={},byLevel={},sel=null;
 const view=$('view');
 const R=new THREE.WebGLRenderer({antialias:true});R.setPixelRatio(Math.min(devicePixelRatio,2));R.localClippingEnabled=true;view.appendChild(R.domElement);
@@ -175,6 +177,7 @@ const theme=()=>{const t=document.documentElement.dataset.theme;const d=t?t=='da
 const planes=[new THREE.Plane(new THREE.Vector3(0,-1,0),48),new THREE.Plane(new THREE.Vector3(-1,0,0),0),new THREE.Plane(new THREE.Vector3(0,0,-1),0)];
 const active=[];
 const edgeMat=new THREE.LineBasicMaterial({color:0x2a2c30,transparent:true,opacity:.55,clippingPlanes:active});
+const edgeMats={};   // solid outlines for styled groups (doors)
 const hiMat=new THREE.MeshStandardMaterial({color:0xe8590c,emissive:0x5a1d00,roughness:.6,side:THREE.DoubleSide,clippingPlanes:active});
 const sizeIt=()=>{const w=view.clientWidth,h=view.clientHeight;R.setSize(w,h,false);cam.aspect=w/h;cam.updateProjectionMatrix()};
 new ResizeObserver(sizeIt).observe(view);
@@ -188,10 +191,11 @@ async function load(){
     const g=new THREE.BufferGeometry();
     g.setAttribute('position',new THREE.BufferAttribute(P.slice(e.v0*3,(e.v0+e.vn)*3),3));
     g.setIndex(new THREE.BufferAttribute(I.slice(e.i0,e.i0+e.in),1));g.computeVertexNormals();
-    const op=e.opacity<1?Math.max(e.opacity,.25):1;
-    const mat=new THREE.MeshStandardMaterial({color:new THREE.Color(...e.color),transparent:op<1,opacity:op,roughness:.85,metalness:0,side:THREE.DoubleSide,clippingPlanes:active,polygonOffset:true,polygonOffsetFactor:1,polygonOffsetUnits:1,depthWrite:op>=1});
+    const st=STYLE[e.group]||{};if(st.color)e.color=st.color;
+    const op=st.opacity??(e.opacity<1?Math.max(e.opacity,.25):1);
+    const mat=new THREE.MeshStandardMaterial({color:new THREE.Color(...e.color),transparent:op<1,opacity:op,roughness:.85,metalness:0,side:THREE.DoubleSide,clippingPlanes:active,polygonOffset:true,polygonOffsetFactor:1,polygonOffsetUnits:1,depthWrite:st.depthWrite??op>=1});
     const m=new THREE.Mesh(g,mat);m.userData.e=e;m.userData.mat=mat;
-    const ed=new THREE.LineSegments(new THREE.EdgesGeometry(g,25),edgeMat);m.add(ed);
+    const ed=new THREE.LineSegments(new THREE.EdgesGeometry(g,25),st.edge?(edgeMats[st.edge]??=new THREE.LineBasicMaterial({color:st.edge,clippingPlanes:active})):edgeMat);m.add(ed);
     S.add(m);meshes.push(m);
     (byGroup[e.group]??=[]).push(m);
     const lv=/Basement/.test(e.storey)?'Basement':/Roof/.test(e.storey)?'Roof / attic':'Main floor';(byLevel[lv]??=[]).push(m);m.userData.lv=lv;
