@@ -143,7 +143,7 @@ kbd{font:600 12px/1 "IBM Plex Sans",sans-serif;border:1px solid var(--line);bord
 <div id="hint"></div>
 <div id="mapw"><div class="cap"><span id="mapL">Main floor</span><span>front ↓</span></div><canvas id="map"></canvas></div>
 <div id="pad" aria-label="Walk controls"><button data-pad="tl" title="Turn left">↺</button><button data-pad="f" title="Forward">▲</button><button data-pad="tr" title="Turn right">↻</button><button data-pad="l" title="Step left">◀</button><button data-pad="b" title="Back">▼</button><button data-pad="r" title="Step right">▶</button></div>
-<aside class="panel" id="sheet" role="dialog" aria-label="Drawing sheet"><div class="bar"><span class="ti" id="shT"></span><a id="shNew" target="_blank" rel="noopener">Open in new tab</a><a id="shDl">Download</a><button id="shX">Close</button></div><div id="shB"></div></aside>
+<aside class="panel" id="sheet" role="dialog" aria-label="Drawing sheet"><div class="bar"><span class="ti" id="shT"></span><a id="shNew" target="_blank" rel="noopener">Open in new tab</a><button id="shDl">Download</button><button id="shX">Close</button></div><div id="shB"></div></aside>
 <aside class="panel" id="help" role="dialog" aria-label="Controls">
  <div class="row"><h2 style="flex:1;margin:0">Getting around</h2><button id="hlpX" style="min-height:30px">Close</button></div>
  <table>
@@ -356,9 +356,14 @@ async function openSheet(s){sheetPanel(s);const body=$('shB');
         try{KEY=await keyFor($('pinI').value.trim());try{sessionStorage.setItem('houseB-sheets-pin',$('pinI').value.trim())}catch(e){}openSheet(s)}catch(e){$('pinM').textContent='That PIN is not right.'}};return}}
   body.innerHTML='<div class="msg">Loading sheet '+esc(s)+'…</div>';
   try{const u=await sheetUrl(s);body.innerHTML='';const f=document.createElement('iframe');f.title='Sheet '+s;f.src=u;body.appendChild(f);
-    $('shNew').href=u;$('shDl').href=u;$('shDl').download=`House-B_${s}.pdf`;$('shNew').style.display=$('shDl').style.display=''}
+    $('shNew').href=u;$('shDl').onclick=()=>saveSheet(s,u);$('shNew').style.display=$('shDl').style.display=''}
   catch(e){body.innerHTML='<div class="msg">The sheet could not be opened: '+esc(e.message)+'</div>'}}
 $('shX').onclick=()=>$('sheet').classList.remove('open');
+// download: inside the claude.ai artifact viewer through its downloads capability; elsewhere a plain download link
+let DLNS;const dlns=async()=>{if(DLNS===undefined){try{DLNS=window.claude&&claude.use?await claude.use('downloads'):null}catch(e){DLNS=null}}return DLNS};
+async function saveSheet(s,u){const name=`House-B_${s}.pdf`,d=await dlns();
+  if(d){try{const b=await (await fetch(u.split('#')[0])).blob();await d.save({filename:name,data:b})}catch(e){if(e&&e.code&&e.code!='declined')$('shT').textContent=`Sheet ${s} - could not be saved here (${e.code})`}return}
+  const a=document.createElement('a');a.href=u.split('#')[0];a.download=name;document.body.appendChild(a);a.click();a.remove()}
 // ---- navigation: orbit + walk, keys, double-click to go, plan map, saved views ----
 const NAV={mode:'orbit',yaw:0,pitch:0,eye:66,speed:48,floor:true,keys:new Set(),pad:new Set(),tw:null};
 const UP=new THREE.Vector3(0,1,0),DN=new THREE.Vector3(0,-1,0);
