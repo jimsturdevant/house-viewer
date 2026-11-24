@@ -49,6 +49,8 @@ dt{color:var(--mute)}dd{margin:0;overflow-wrap:anywhere}
 .name{font:600 20px/1.15 "IBM Plex Sans Condensed",sans-serif}
 .tag{display:inline-block;font-size:12px;background:var(--accs);color:var(--ink);border-radius:6px;padding:2px 7px;margin:4px 4px 0 0}
 #meas{font-size:13px}
+button.tag{min-height:0;border:1px solid transparent;font-size:12px;padding:2px 7px;cursor:pointer}button.tag:hover{border-color:var(--acc)}
+#presets button.on{background:var(--acc);color:#fff;border-color:var(--acc)}
 #meas li{margin:4px 0;font-variant-numeric:tabular-nums}
 .lab{position:fixed;z-index:1;transform:translate(-50%,-120%);background:var(--acc);color:#fff;font:600 13px/1 "IBM Plex Sans",sans-serif;padding:4px 7px;border-radius:5px;white-space:nowrap;pointer-events:none}
 #hint{position:fixed;left:50%;bottom:14px;transform:translateX(-50%);z-index:3;font-size:13px;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:6px 10px;color:var(--mute);max-width:92vw;text-align:center}
@@ -112,7 +114,7 @@ kbd{font:600 12px/1 "IBM Plex Sans",sans-serif;border:1px solid var(--line);bord
  <div class="row"><label><input type="checkbox" id="mapOn" checked>Plan map</label></div>
  <h2>Views</h2>
  <div class="btns" id="views2"></div>
- <div class="btns" style="margin-top:6px"><button id="vSave">Save this view</button></div>
+ <div class="btns" style="margin-top:6px"><button id="vSave">Save this view</button><button id="reset" title="Back to the starting view and settings">Reset view</button></div>
  <div id="saved"></div>
  <h2>Measure</h2>
  <div class="btns"><button id="mBtn">Measure</button><button id="mSnap" class="on">Snap to corners</button><button id="mClr">Clear</button></div>
@@ -121,7 +123,9 @@ kbd{font:600 12px/1 "IBM Plex Sans",sans-serif;border:1px solid var(--line);bord
  <div id="cuts"></div>
  <div class="btns" style="margin-top:6px"><button id="pPlan">Plan cut 4'-0"</button><button id="pBsmt">Basement</button><button id="pOff">No cuts</button></div>
  <h2>Show</h2>
- <div id="groups"></div>
+  <div class="btns" id="presets"></div>
+  <div class="slid" style="margin-top:6px"><span>Walls</span><input type="range" id="wop" min="10" max="100" step="1" value="82"><span class="v" id="wopV"></span></div>
+  <div id="groups"></div>
  <h2>Levels</h2>
  <div id="levels"></div>
 </aside>
@@ -143,10 +147,12 @@ kbd{font:600 12px/1 "IBM Plex Sans",sans-serif;border:1px solid var(--line);bord
  <tr><td><kbd>W</kbd> <kbd>S</kbd> / <kbd>↑</kbd> <kbd>↓</kbd></td><td>Walk forward / back (scroll does the same)</td></tr>
  <tr><td><kbd>A</kbd> <kbd>D</kbd> · <kbd>←</kbd> <kbd>→</kbd></td><td>Step sideways · turn</td></tr>
  <tr><td><kbd>Shift</kbd></td><td>Hold to move 3× faster</td></tr>
- <tr><td>Double-click</td><td>Go there: a floor point, or stand 2'-6" in front of a wall, door or fixture</td></tr>
+ <tr><td>Double-click</td><td>Go there: a floor point, or stand 2'-6" in front of a wall or fixture; on a door, walk through it to the other side</td></tr>
  <tr><td><kbd>Q</kbd> <kbd>E</kbd></td><td>Fly down / up (turns off "stay on the floor"; <kbd>G</kbd> lands again)</td></tr>
  <tr><td colspan="2" style="color:var(--mute);font-weight:400">Both</td></tr>
- <tr><td>Click</td><td>Inspect an element; <kbd>F</kbd> moves in on the selected one</td></tr>
+ <tr><td>Click</td><td>Inspect an element; click the same spot again to pick what is behind it (framing behind a wall, say); <kbd>F</kbd> moves in on the selected one</td></tr>
+  <tr><td>Sheet tags</td><td>Click a sheet tag (A1, S2…) in the selection panel to show everything that cites that sheet</td></tr>
+  <tr><td>Show</td><td>Presets switch the categories in one click; the Walls slider sets how solid walls and cladding look. The viewer remembers your settings in this browser; Reset view puts them back</td></tr>
  <tr><td>Plan map</td><td>Click to move there (walk) or to centre the view there (orbit); <kbd>M</kbd> shows / hides it</td></tr>
  <tr><td><kbd>1</kbd> / <kbd>2</kbd></td><td>Orbit / Walk</td></tr>
  <tr><td><kbd>Esc</kbd></td><td>Stop measuring, close the selection</td></tr>
@@ -165,6 +171,16 @@ const ORDER=['Walls','Doors','Windows','Cladding','Roof','Slabs','Foundation wal
 const OFF=new Set(['Clearances','Clashes']);   // everything else starts on; clash and clear-zone conflict markers are opt-in
 // display styles that override the model colour / opacity: walls and cladding read as solid but let the framing behind show; doors contrast and see-through
 const STYLE={Walls:{opacity:.82,depthWrite:true},Cladding:{opacity:.82,depthWrite:true},Doors:{color:[.36,.22,.13],opacity:.45,edge:0x3a2010}};
+const PRESETS={
+  Everything:null,   // every group except OFF
+  Architecture:['Walls','Doors','Windows','Cladding','Roof','Slabs','Foundation walls','Stair','Casework','Fixtures','Appliances','Equipment','Exterior trim','Ceilings','Porch columns'],
+  Structure:['Foundation walls','Footings','Slabs','Floor framing','Wall framing','Roof framing','Ceiling framing','Porch framing','Porch columns','Stair'],
+  MEP:['HVAC','Plumbing','Electrical','Fixtures','Appliances','Equipment','Slabs','Foundation walls','Stair'],
+  Conflicts:['Clashes','Clearances','Walls','Slabs','Foundation walls','Floor framing','Wall framing','Roof framing','Ceiling framing','HVAC','Plumbing','Electrical']};
+const WOP0=82;   // default wall / cladding solidity, %
+const SK='houseB-viewer-settings';   // remembered settings, this browser only
+const loadSet=()=>{try{return JSON.parse(localStorage.getItem(SK)||'null')}catch(e){return null}};
+const saveSet=()=>{try{localStorage.setItem(SK,JSON.stringify({off:[...document.querySelectorAll('[data-g]:not(:checked)')].map(i=>i.dataset.g),lvOff:[...document.querySelectorAll('[data-l]:not(:checked)')].map(i=>i.dataset.l),wop:+$('wop').value,map:$('mapOn').checked,eye:+$('eye').value,spd:+$('spd').value}))}catch(e){}};
 let M,meshes=[],byGroup={},byLevel={},sel=null;
 const view=$('view');
 const R=new THREE.WebGLRenderer({antialias:true});R.setPixelRatio(Math.min(devicePixelRatio,2));R.localClippingEnabled=true;view.appendChild(R.domElement);
@@ -216,7 +232,20 @@ function buildUI(){
   const gs=ORDER.filter(g=>byGroup[g]).concat(Object.keys(byGroup).filter(g=>!ORDER.includes(g)).sort());  // a group missing from ORDER still gets a checkbox
   $('groups').innerHTML=gs.map(g=>{const c=byGroup[g][0].userData.e.color;return `<div class="row"><label><input type="checkbox" data-g="${g}" ${OFF.has(g)?'':'checked'}><span class="sw" style="background:rgb(${c.map(x=>Math.round(x*255))})"></span>${g}</label><span class="n">${byGroup[g].length}</span></div>`}).join('');
   $('levels').innerHTML=['Basement','Main floor','Roof / attic'].filter(l=>byLevel[l]).map(l=>`<div class="row"><label><input type="checkbox" data-l="${l}" checked>${l}</label><span class="n">${byLevel[l].length}</span></div>`).join('');
-  document.querySelectorAll('[data-g],[data-l]').forEach(i=>i.onchange=vis);vis();
+  const st=loadSet();
+  if(st){document.querySelectorAll('[data-g]').forEach(i=>i.checked=!st.off.includes(i.dataset.g));document.querySelectorAll('[data-l]').forEach(i=>i.checked=!(st.lvOff||[]).includes(i.dataset.l));
+    if(st.wop)$('wop').value=st.wop;if(st.map===false&&$('mapOn').checked)$('mapOn').click();if(st.eye){$('eye').value=st.eye;$('eye').oninput()}if(st.spd){$('spd').value=st.spd;$('spd').oninput()}}
+  document.querySelectorAll('[data-g],[data-l]').forEach(i=>i.onchange=()=>{vis();saveSet()});vis();
+  $('presets').innerHTML=Object.keys(PRESETS).map(k=>`<button data-p="${k}">${k}</button>`).join('');
+  document.querySelectorAll('[data-p]').forEach(b=>b.onclick=()=>{const L=PRESETS[b.dataset.p];document.querySelectorAll('[data-g]').forEach(i=>i.checked=L?L.includes(i.dataset.g):!OFF.has(i.dataset.g));vis();saveSet()});vis();
+  $('wop').oninput=()=>{const v=+$('wop').value/100;$('wopV').textContent=Math.round(v*100)+'% solid';
+    for(const m of [...(byGroup['Walls']||[]),...(byGroup['Cladding']||[])]){const t=m.userData.mat;t.opacity=v;if(t.transparent!=(v<1)){t.transparent=v<1;t.needsUpdate=true}}};
+  $('wop').onchange=saveSet;$('wop').oninput();
+  for(const id of ['mapOn','eye','spd'])$(id).addEventListener('change',saveSet);
+  $('reset').onclick=()=>{try{localStorage.removeItem(SK)}catch(e){}
+    document.querySelectorAll('[data-g]').forEach(i=>i.checked=!OFF.has(i.dataset.g));document.querySelectorAll('[data-l]').forEach(i=>i.checked=true);vis();
+    $('wop').value=WOP0;$('wop').oninput();document.querySelectorAll('[data-c]').forEach(i=>i.checked=false);cuts();
+    select(null);setMode('orbit');setView('3D');setHint()};
   const C=[['Height (cut above)',0,-140,360,48],['East–west (keep west of)',1,-560,560,560],['North–south (keep behind)',2,-460,460,460]];
   $('cuts').innerHTML=C.map(([n,i,a,b,v])=>`<div class="cut"><div class="row"><label><input type="checkbox" data-c="${i}">${n}</label><button data-f="${i}" style="min-height:30px">Flip</button></div><input type="range" data-r="${i}" min="${a}" max="${b}" step="0.5" value="${v}"><div class="v" data-o="${i}"></div></div>`).join('');
   document.querySelectorAll('[data-c]').forEach(i=>i.onchange=cuts);document.querySelectorAll('[data-r]').forEach(i=>i.oninput=cuts);
@@ -228,6 +257,8 @@ function buildUI(){
 function vis(){
   const g=new Set([...document.querySelectorAll('[data-g]:checked')].map(i=>i.dataset.g)),l=new Set([...document.querySelectorAll('[data-l]:checked')].map(i=>i.dataset.l));
   for(const m of meshes)m.visible=g.has(m.userData.e.group)&&l.has(m.userData.lv);
+  const all=[...document.querySelectorAll('[data-g]')].map(i=>i.dataset.g);
+  document.querySelectorAll('[data-p]').forEach(b=>{const L=PRESETS[b.dataset.p],want=new Set(L?all.filter(x=>L.includes(x)):all.filter(x=>!OFF.has(x)));b.classList.toggle('on',want.size==g.size&&[...want].every(x=>g.has(x)))});
 }
 function cuts(){
   active.length=0;
@@ -242,6 +273,9 @@ const ray=new THREE.Raycaster(),ndc=new THREE.Vector2();
 let mode=false,snap=true,pend=null,dims=[];
 function hit(ev){const r=R.domElement.getBoundingClientRect();ndc.set((ev.clientX-r.left)/r.width*2-1,-(ev.clientY-r.top)/r.height*2+1);ray.setFromCamera(ndc,cam);
   for(const h of ray.intersectObjects(meshes.filter(m=>m.visible),false)){if(!clipped(h.point))return {h,r};}return null}
+// every element under the cursor, nearest first, one entry each (for click-again-to-pick-behind)
+function hitAll(ev){if(!hit(ev))return [];const out=[],seen=new Set();for(const h of ray.intersectObjects(meshes.filter(m=>m.visible),false)){if(clipped(h.point)||seen.has(h.object))continue;seen.add(h.object);out.push(h.object)}return out}
+let lastClick=null,pickInfo='';
 function snapPt(h,r){if(!snap||!h.face)return h.point.clone();const pos=h.object.geometry.attributes.position;let best=null,bd=1e9;
   for(const k of [h.face.a,h.face.b,h.face.c]){const v=new THREE.Vector3().fromBufferAttribute(pos,k);const s=v.clone().project(cam);const px=Math.hypot((s.x-ndc.x)*r.width/2,(s.y-ndc.y)*r.height/2);if(px<bd){bd=px;best=v}}
   return bd<16?best:h.point.clone()}
@@ -254,7 +288,10 @@ let down=null;
 R.domElement.addEventListener('pointerdown',e=>down=[e.clientX,e.clientY]);
 R.domElement.addEventListener('pointerup',e=>{if(!down||Math.hypot(e.clientX-down[0],e.clientY-down[1])>5)return;const q=hit(e);
   if(mode){if(!q)return;const p=snapPt(q.h,q.r);if(!pend){pend={p,o:dot(p)};setHint()}else{S.remove(pend.o);addDim(pend.p,p);pend=null;setHint()}return}
-  select(q?q.h.object:null)});
+  const all=hitAll(e);let k=0;
+  if(sel&&lastClick&&Math.hypot(e.clientX-lastClick[0],e.clientY-lastClick[1])<6){const i=all.indexOf(sel);if(i>=0)k=e.timeStamp-lastClick[2]<400?i:(i+1)%all.length}   // the 2nd click of a double-click keeps the pick
+  lastClick=[e.clientX,e.clientY,e.timeStamp];pickInfo=all.length>1?`Item ${k+1} of ${all.length} under the cursor · click the same spot again for the next one behind`:'';
+  select(all[k]||null)});
 $('mBtn').onclick=()=>{mode=!mode;$('mBtn').classList.toggle('on',mode);setHint();if(pend){S.remove(pend.o);pend=null}};
 $('mSnap').onclick=()=>{snap=!snap;$('mSnap').classList.toggle('on',snap)};
 $('mClr').onclick=()=>{for(const d of dims){d.objs.forEach(o=>S.remove(o));d.lab.remove()}dims=[];$('meas').innerHTML=''};
@@ -269,14 +306,19 @@ function select(m){
   const bb=e.bbox,wx=bb[3]-bb[0],wy=bb[4]-bb[1],wz=bb[5]-bb[2];
   const skip=new Set(['LOD','Source']);
   box.innerHTML=`<div class="name">${esc(e.name)}</div><div class="sub">${esc(e.group)} · ${esc(e.cls.replace('Ifc',''))} · ${esc(e.storey)}</div>${MEP.has(e.group)?'<div class="tag">Schematic routing: the trade layouts govern</div>':''}
-  ${sheets.length?`<div>${sheets.map(s=>`<span class="tag">${s}</span>`).join('')}</div>`:''}
+  ${sheets.length?`<div>${sheets.map(s=>`<button class="tag" data-sh="${s}" title="Show everything that cites ${s}">${s}</button>${M.sheetUrls&&M.sheetUrls[s]?`<a class="tag" href="${esc(M.sheetUrls[s])}" target="_blank" rel="noopener">open ${s}</a>`:''}`).join('')}</div>`:''}
+  ${pickInfo?`<div class="sub" style="margin-top:6px">${pickInfo}</div>`:''}
   <dl>${Object.entries(p).filter(([k])=>!skip.has(k)).map(([k,v])=>`<dt>${esc(k.replace(/_in$/,' (in)').replace(/_/g,' '))}</dt><dd>${esc(typeof v=='number'?(Math.round(v*1000)/1000):v)}</dd>`).join('')}
   <dt>Extents</dt><dd>${ftin(wx)} × ${ftin(wz)} plan, ${ftin(wy)} high</dd><dt>Elevation</dt><dd>${ftin(bb[1])} to ${ftin(bb[4])} from F.F.</dd>
   ${p.Source?`<dt>Source</dt><dd>${esc(p.Source)}</dd>`:''}${p.LOD?`<dt>LOD</dt><dd>${esc(p.LOD)}</dd>`:''}</dl>
   <div class="btns" style="margin-top:10px"><button id="zto">Go to</button><button id="iso">Isolate</button><button id="all">Show all</button><button id="cls">Close</button></div>`;
   $('iso').onclick=()=>{for(const x of meshes)x.visible=x===m;fitTo([m],cam.position.clone().sub(ctl.target))};
-  $('zto').onclick=()=>fitTo([m],cam.position.clone().sub(ctl.target));$('all').onclick=vis;$('cls').onclick=()=>select(null);
+  $('zto').onclick=()=>fitTo([m],cam.position.clone().sub(ctl.target));$('all').onclick=()=>{vis();setHint()};$('cls').onclick=()=>select(null);
+  box.querySelectorAll('[data-sh]').forEach(b=>b.onclick=()=>showSheet(b.dataset.sh));pickInfo='';
 }
+// everything whose properties cite a sheet (A1 matches A1, not A1.1)
+function showSheet(s){const re=new RegExp('\\b'+s.replace('.','\\.')+'\\b(?!\\.\\d)');const L=meshes.filter(m=>re.test(JSON.stringify(m.userData.e.props)));
+  for(const m of meshes)m.visible=L.includes(m);$('hint').textContent=`Showing the ${L.length} items that cite ${s} · Show all in the selection panel, or Reset view, brings the rest back`;fitTo(L,cam.position.clone().sub(ctl.target))}
 // ---- navigation: orbit + walk, keys, double-click to go, plan map, saved views ----
 const NAV={mode:'orbit',yaw:0,pitch:0,eye:66,speed:48,floor:true,keys:new Set(),pad:new Set(),tw:null};
 const UP=new THREE.Vector3(0,1,0),DN=new THREE.Vector3(0,-1,0);
@@ -305,8 +347,8 @@ function setMode(m){
 }
 function setHint(){
   $('hint').textContent=mode?(pend?'Pick the second point':'Pick the first point'):NAV.mode=='walk'
-   ?'Drag to look · W/S or ↑/↓ walk · A/D step · ←/→ turn · Shift faster · double-click to go there · H for all controls'
-   :'Drag to orbit · right-drag or Shift-drag to pan · scroll zooms toward the cursor · double-click to move in on a point · 2 to walk · H for help'}
+   ?'Drag to look · W/S or ↑/↓ walk · A/D step · ←/→ turn · Shift faster · double-click to go there, or through a door · H for all controls'
+   :'Drag to orbit · right-drag or Shift-drag to pan · scroll zooms · double-click to move in · click again on the same spot to pick what is behind · 2 to walk · H for help'}
 const ease=t=>t<.5?2*t*t:1-Math.pow(-2*t+2,2)/2;
 function tween(p1,t1,dur=.5){NAV.tw={k:0,dur,p0:cam.position.clone(),p1,t0:ctl.target.clone(),t1:t1||null,y0:NAV.yaw,y1:NAV.yaw}}
 // walk: stand at a point; for a wall / fixture face, stand 2'-6" in front of it, facing it
@@ -323,7 +365,13 @@ function walkToObj(m){const e=m.userData.e,b=e.bbox,c=new THREE.Vector3((b[0]+b[
   walkTo(face,n.clone().multiplyScalar(1).setY(0))}
 function orbitTo(pt){const off=cam.position.clone().sub(ctl.target);const d=Math.min(off.length(),Math.max(120,off.length()*.35));tween(pt.clone().add(off.setLength(d)),pt.clone(),.5)}
 R.domElement.addEventListener('dblclick',e=>{if(mode)return;const q=hit(e);if(!q)return;
-  if(NAV.mode=='walk'){const n=q.h.face?q.h.face.normal.clone():null;walkTo(q.h.point,n)}else orbitTo(q.h.point)});
+  if(NAV.mode=='walk'){if(q.h.object.userData.e.group=='Doors')return walkThrough(q.h.object,q.h.point);const n=q.h.face?q.h.face.normal.clone():null;walkTo(q.h.point,n)}else orbitTo(q.h.point)});
+// walk: through a door to 3'-0" past it, facing the way you went (the door's thin side gives the direction)
+function walkThrough(m,pt){const b=m.userData.e.bbox,c=new THREE.Vector3((b[0]+b[3])/2,0,(b[2]+b[5])/2);
+  const n=(b[3]-b[0])<(b[5]-b[2])?new THREE.Vector3(1,0,0):new THREE.Vector3(0,0,1);if(n.dot(c.clone().sub(cam.position).setY(0))<0)n.negate();
+  const dest=pt.clone();if(n.x)dest.x=c.x+n.x*36;else dest.z=c.z+n.z*36;
+  dest.y=floorBelow(dest.x,cam.position.y-NAV.eye+30,dest.z)+NAV.eye;tween(dest,null,.8);
+  let y1=Math.atan2(-n.x,-n.z),dy=y1-NAV.yaw;while(dy>Math.PI)dy-=2*Math.PI;while(dy<-Math.PI)dy+=2*Math.PI;NAV.tw.y1=NAV.yaw+dy;NAV.pitch=0;setTimeout(()=>select(null),0)}
 // walk: drag to look
 let look=null;
 R.domElement.addEventListener('pointerdown',e=>{if(NAV.mode=='walk'){look=[e.clientX,e.clientY];R.domElement.setPointerCapture?.(e.pointerId)}});
