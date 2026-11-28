@@ -1,6 +1,6 @@
 # House B 3D model viewer
 
-Read-only 3D model of House B, Set Rev 49 (model v93), for bidders and trades.
+Read-only 3D model of House B, Set Rev 50 (model v94), for bidders and trades.
 
 **Open it:** https://jimsturdevant.github.io/house-viewer/ (works on computers and phones), or download `index.html` and open it in any current browser. It needs no install or account and works offline.
 
@@ -8,4 +8,4 @@ Read-only 3D model of House B, Set Rev 49 (model v93), for bidders and trades.
 
 **Drawings:** select an item and use the orange "open" tag next to a sheet number to see that drawing sheet. These are a public reference copy (owner, designer and site information withheld; not for construction) and need a PIN from the owner.
 
-**What governs:** the sealed PDF construction set. MEP routing in the model is schematic; the trade layouts govern. The model is updated with every published design revision; this page shows Set Rev 49.
+**What governs:** the sealed PDF construction set. MEP routing in the model is schematic; the trade layouts govern. The model is updated with every published design revision; this page shows Set Rev 50.
